@@ -8,26 +8,25 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root {
-  --bg:    #f6f6f4;
-  --wh:    #ffffff;
-  --bd:    #e0e0dc;
-  --bd2:   #c4c4be;
-  --tx:    #0f0f0e;
-  --tx2:   #484844;
-  --tx3:   #989890;
-  --hov:   #f0f0ec;
-  --sel:   #e8e8e4;
-  --up:    #1a6e35;
-  --upbg:  #edf6f1;
-  --dn:    #a81a1a;
-  --dnbg:  #fdf0f0;
-  --fl:    #888880;
-  --mono:  'Noto Sans Mono', monospace;
-  --sans:  'Noto Sans KR', sans-serif;
+  --bg:   #f6f6f4;
+  --wh:   #ffffff;
+  --bd:   #e0e0dc;
+  --bd2:  #c4c4be;
+  --tx:   #0f0f0e;
+  --tx2:  #484844;
+  --tx3:  #989890;
+  --hov:  #f0f0ec;
+  --sel:  #e8e8e4;
+  --up:   #1a6e35;
+  --upbg: #edf6f1;
+  --dn:   #a81a1a;
+  --dnbg: #fdf0f0;
+  --fl:   #888880;
+  --mono: 'Noto Sans Mono', monospace;
+  --sans: 'Noto Sans KR', sans-serif;
 }
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--tx);font-family:var(--sans);font-size:14px;line-height:1.5;min-height:100vh}
-
 .page{max-width:1460px;margin:0 auto;padding:0 28px 80px}
 
 /* 헤더 */
@@ -35,9 +34,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:26p
 .wm{font-weight:700;font-size:17px;letter-spacing:-.3px;display:flex;align-items:baseline;gap:10px}
 .wms{font-size:11px;font-weight:300;color:var(--tx3);letter-spacing:1px}
 .hr{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.live{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;color:var(--up);letter-spacing:1.5px}
-.dot{width:5px;height:5px;background:var(--up);border-radius:50%;animation:blink 2s ease-in-out infinite}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.upd-info{font-family:var(--mono);font-size:10px;color:var(--tx3);line-height:1.6;text-align:right}
 .ts{font-family:var(--mono);font-size:11px;color:var(--tx3)}
 .btn{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--tx2);background:var(--wh);border:1px solid var(--bd2);padding:6px 14px;cursor:pointer;border-radius:2px;transition:all .15s;letter-spacing:.3px}
 .btn:hover{border-color:var(--tx);color:var(--tx)}
@@ -145,7 +142,7 @@ tbody td{padding:9px 18px}
 <header>
   <div class="wm">환율 대시보드<span class="wms">FOREX MONITOR</span></div>
   <div class="hr">
-    <div class="live"><div class="dot"></div>LIVE</div>
+    <div class="upd-info" id="updInfo">ECB 기준 · 매일 16:00 CET 갱신</div>
     <div class="ts" id="ts">—</div>
     <button class="btn" id="rb" onclick="fetchAll()">↻ 새로고침</button>
   </div>
@@ -153,7 +150,6 @@ tbody td{padding:9px 18px}
 
 <div class="ticker"><div class="t-in" id="tk"><div class="ti">불러오는 중…</div></div></div>
 
-<!-- 기준통화 바 -->
 <div class="bbar">
   <span class="bl">기준 통화</span>
   <button class="barr" id="bprev" onclick="scrollBase(-1)">‹</button>
@@ -181,278 +177,132 @@ tbody td{padding:9px 18px}
       <div class="ch"><div class="ct">기간 통계</div></div>
       <div class="sg" id="sg"></div>
     </div>
+    <div class="card">
+      <div style="padding:12px 18px;font-size:11px;color:var(--tx3);line-height:1.8">
+        <strong style="font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:6px;color:var(--tx2)">데이터 출처</strong>
+        유럽중앙은행 (ECB) 참조 환율<br>
+        API: frankfurter.app · 32개 통화 지원<br>
+        등락률: 전 영업일 대비
+      </div>
+    </div>
   </div>
 </div>
-
 </div>
 
 <script>
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  통화 데이터 (기축/준기축 표시 없음)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// na:true = 국제 API 미지원 통화
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  Frankfurter 지원 32개 통화
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const CUR = {
-  // 주요 통화
-  USD:{n:'미국 달러',              f:'🇺🇸'},
-  EUR:{n:'유로',                   f:'🇪🇺'},
-  JPY:{n:'일본 엔',                f:'🇯🇵'},
-  GBP:{n:'영국 파운드',            f:'🇬🇧'},
-  CNY:{n:'중국 위안',              f:'🇨🇳'},
-  CHF:{n:'스위스 프랑',            f:'🇨🇭'},
   AUD:{n:'호주 달러',              f:'🇦🇺'},
-  CAD:{n:'캐나다 달러',            f:'🇨🇦'},
-  HKD:{n:'홍콩 달러',              f:'🇭🇰'},
-  NZD:{n:'뉴질랜드 달러',          f:'🇳🇿'},
-  SGD:{n:'싱가포르 달러',          f:'🇸🇬'},
-  // 아시아
-  KRW:{n:'한국 원',                f:'🇰🇷'},
-  TWD:{n:'대만 달러',              f:'🇹🇼'},
-  INR:{n:'인도 루피',              f:'🇮🇳'},
-  IDR:{n:'인도네시아 루피아',       f:'🇮🇩'},
-  MYR:{n:'말레이시아 링깃',         f:'🇲🇾'},
-  PHP:{n:'필리핀 페소',            f:'🇵🇭'},
-  THB:{n:'태국 바트',              f:'🇹🇭'},
-  VND:{n:'베트남 동',              f:'🇻🇳'},
-  PKR:{n:'파키스탄 루피',          f:'🇵🇰'},
-  BDT:{n:'방글라데시 타카',         f:'🇧🇩'},
-  LKR:{n:'스리랑카 루피',          f:'🇱🇰'},
-  NPR:{n:'네팔 루피',              f:'🇳🇵'},
-  MMK:{n:'미얀마 짯',              f:'🇲🇲'},
-  KHR:{n:'캄보디아 리엘',          f:'🇰🇭'},
-  MNT:{n:'몽골 투그릭',            f:'🇲🇳'},
-  LAK:{n:'라오스 킵',              f:'🇱🇦'},
-  BND:{n:'브루나이 달러',           f:'🇧🇳'},
-  MVR:{n:'몰디브 루피야',           f:'🇲🇻'},
-  BTN:{n:'부탄 눌트럼',            f:'🇧🇹'},
-  AFN:{n:'아프가니스탄 아프가니',   f:'🇦🇫'},
-  // 유럽
-  NOK:{n:'노르웨이 크로네',         f:'🇳🇴'},
-  SEK:{n:'스웨덴 크로나',           f:'🇸🇪'},
-  DKK:{n:'덴마크 크로네',           f:'🇩🇰'},
-  ISK:{n:'아이슬란드 크로나',        f:'🇮🇸'},
-  PLN:{n:'폴란드 즈워티',           f:'🇵🇱'},
-  CZK:{n:'체코 코루나',             f:'🇨🇿'},
-  HUF:{n:'헝가리 포린트',           f:'🇭🇺'},
-  RON:{n:'루마니아 레우',           f:'🇷🇴'},
   BGN:{n:'불가리아 레프',           f:'🇧🇬'},
-  RSD:{n:'세르비아 디나르',         f:'🇷🇸'},
-  UAH:{n:'우크라이나 흐리브냐',     f:'🇺🇦'},
-  MDL:{n:'몰도바 레우',             f:'🇲🇩'},
-  ALL:{n:'알바니아 레크',           f:'🇦🇱'},
-  MKD:{n:'북마케도니아 데나르',     f:'🇲🇰'},
-  GEL:{n:'조지아 라리',             f:'🇬🇪'},
-  AMD:{n:'아르메니아 드람',         f:'🇦🇲'},
-  AZN:{n:'아제르바이잔 마나트',     f:'🇦🇿'},
-  KZT:{n:'카자흐스탄 텡게',         f:'🇰🇿'},
-  UZS:{n:'우즈베키스탄 숨',         f:'🇺🇿'},
-  KGS:{n:'키르기스스탄 솜',         f:'🇰🇬'},
-  TJS:{n:'타지키스탄 소모니',       f:'🇹🇯'},
-  TMT:{n:'투르크메니스탄 마나트',   f:'🇹🇲'},
-  BYN:{n:'벨라루스 루블',           f:'🇧🇾'},
-  TRY:{n:'터키 리라',               f:'🇹🇷'},
-  RUB:{n:'러시아 루블',             f:'🇷🇺'},
-  // 중동
-  AED:{n:'UAE 디르함',              f:'🇦🇪'},
-  SAR:{n:'사우디 리얄',             f:'🇸🇦'},
-  ILS:{n:'이스라엘 셰켈',           f:'🇮🇱'},
-  QAR:{n:'카타르 리얄',             f:'🇶🇦'},
-  KWD:{n:'쿠웨이트 디나르',         f:'🇰🇼'},
-  BHD:{n:'바레인 디나르',           f:'🇧🇭'},
-  OMR:{n:'오만 리알',               f:'🇴🇲'},
-  JOD:{n:'요르단 디나르',           f:'🇯🇴'},
-  LBP:{n:'레바논 파운드',           f:'🇱🇧'},
-  IQD:{n:'이라크 디나르',           f:'🇮🇶'},
-  IRR:{n:'이란 리알',               f:'🇮🇷'},
-  YER:{n:'예멘 리알',               f:'🇾🇪'},
-  // 아프리카
-  ZAR:{n:'남아공 랜드',             f:'🇿🇦'},
-  EGP:{n:'이집트 파운드',           f:'🇪🇬'},
-  NGN:{n:'나이지리아 나이라',        f:'🇳🇬'},
-  GHS:{n:'가나 세디',               f:'🇬🇭'},
-  KES:{n:'케냐 실링',               f:'🇰🇪'},
-  ETB:{n:'에티오피아 비르',          f:'🇪🇹'},
-  TZS:{n:'탄자니아 실링',            f:'🇹🇿'},
-  UGX:{n:'우간다 실링',             f:'🇺🇬'},
-  MAD:{n:'모로코 디르함',           f:'🇲🇦'},
-  TND:{n:'튀니지 디나르',           f:'🇹🇳'},
-  DZD:{n:'알제리 디나르',           f:'🇩🇿'},
-  LYD:{n:'리비아 디나르',           f:'🇱🇾'},
-  RWF:{n:'르완다 프랑',             f:'🇷🇼'},
-  XOF:{n:'서아프리카 CFA 프랑',     f:'🌍'},
-  XAF:{n:'중앙아프리카 CFA 프랑',   f:'🌍'},
-  ZMW:{n:'잠비아 콰차',             f:'🇿🇲'},
-  MWK:{n:'말라위 콰차',             f:'🇲🇼'},
-  MZN:{n:'모잠비크 메티칼',         f:'🇲🇿'},
-  AOA:{n:'앙골라 콴자',             f:'🇦🇴'},
-  GMD:{n:'감비아 달라시',           f:'🇬🇲'},
-  GNF:{n:'기니 프랑',               f:'🇬🇳'},
-  KMF:{n:'코모로 프랑',             f:'🇰🇲'},
-  LRD:{n:'라이베리아 달러',         f:'🇱🇷'},
-  LSL:{n:'레소토 로티',             f:'🇱🇸'},
-  MGA:{n:'마다가스카르 아리아리',   f:'🇲🇬'},
-  MRU:{n:'모리타니 우기야',         f:'🇲🇷'},
-  MUR:{n:'모리셔스 루피',           f:'🇲🇺'},
-  NAD:{n:'나미비아 달러',           f:'🇳🇦'},
-  SCR:{n:'세이셸 루피',             f:'🇸🇨'},
-  SLE:{n:'시에라리온 레온',         f:'🇸🇱'},
-  SOS:{n:'소말리아 실링',           f:'🇸🇴'},
-  SSP:{n:'남수단 파운드',           f:'🇸🇸'},
-  STN:{n:'상투메 도브라',           f:'🇸🇹'},
-  SZL:{n:'에스와티니 릴랑게니',     f:'🇸🇿'},
-  ZWG:{n:'짐바브웨 골드 (ZiG)',     f:'🇿🇼', na:true},
-  // 아메리카
-  MXN:{n:'멕시코 페소',             f:'🇲🇽'},
   BRL:{n:'브라질 헤알',             f:'🇧🇷'},
-  ARS:{n:'아르헨티나 페소',         f:'🇦🇷'},
-  CLP:{n:'칠레 페소',               f:'🇨🇱'},
-  COP:{n:'콜롬비아 페소',           f:'🇨🇴'},
-  PEN:{n:'페루 솔',                 f:'🇵🇪'},
-  UYU:{n:'우루과이 페소',           f:'🇺🇾'},
-  BOB:{n:'볼리비아 볼리비아노',     f:'🇧🇴'},
-  PYG:{n:'파라과이 과라니',         f:'🇵🇾'},
-  VES:{n:'베네수엘라 볼리바르',     f:'🇻🇪'},
-  CRC:{n:'코스타리카 콜론',         f:'🇨🇷'},
-  GTQ:{n:'과테말라 케찰',           f:'🇬🇹'},
-  HNL:{n:'온두라스 렘피라',         f:'🇭🇳'},
-  NIO:{n:'니카라과 코르도바',       f:'🇳🇮'},
-  DOP:{n:'도미니카 페소',           f:'🇩🇴'},
-  JMD:{n:'자메이카 달러',           f:'🇯🇲'},
-  TTD:{n:'트리니다드 달러',         f:'🇹🇹'},
-  BBD:{n:'바베이도스 달러',         f:'🇧🇧'},
-  XCD:{n:'동카리브 달러',           f:'🌎'},
-  BMD:{n:'버뮤다 달러',             f:'🇧🇲'},
-  KYD:{n:'케이맨 달러',             f:'🇰🇾'},
-  BSD:{n:'바하마 달러',             f:'🇧🇸'},
-  BZD:{n:'벨리즈 달러',             f:'🇧🇿'},
-  GYD:{n:'가이아나 달러',           f:'🇬🇾'},
-  SRD:{n:'수리남 달러',             f:'🇸🇷'},
-  AWG:{n:'아루바 플로린',           f:'🇦🇼'},
-  CUP:{n:'쿠바 페소',               f:'🇨🇺'},
-  HTG:{n:'아이티 구르드',           f:'🇭🇹'},
-  PAB:{n:'파나마 발보아',           f:'🇵🇦'},
-  // 오세아니아
-  FJD:{n:'피지 달러',               f:'🇫🇯'},
-  PGK:{n:'파푸아뉴기니 키나',       f:'🇵🇬'},
-  SBD:{n:'솔로몬 달러',             f:'🇸🇧'},
-  TOP:{n:'통가 파앙가',             f:'🇹🇴'},
-  VUV:{n:'바누아투 바투',           f:'🇻🇺'},
-  WST:{n:'사모아 탈라',             f:'🇼🇸'},
-  // 귀금속
-  XAU:{n:'금 (트로이온스)',          f:'🥇'},
-  XAG:{n:'은 (트로이온스)',          f:'🥈'},
+  CAD:{n:'캐나다 달러',             f:'🇨🇦'},
+  CHF:{n:'스위스 프랑',             f:'🇨🇭'},
+  CNY:{n:'중국 위안',               f:'🇨🇳'},
+  CZK:{n:'체코 코루나',             f:'🇨🇿'},
+  DKK:{n:'덴마크 크로네',           f:'🇩🇰'},
+  EUR:{n:'유로',                    f:'🇪🇺'},
+  GBP:{n:'영국 파운드',             f:'🇬🇧'},
+  HKD:{n:'홍콩 달러',               f:'🇭🇰'},
+  HUF:{n:'헝가리 포린트',           f:'🇭🇺'},
+  IDR:{n:'인도네시아 루피아',        f:'🇮🇩'},
+  ILS:{n:'이스라엘 셰켈',           f:'🇮🇱'},
+  INR:{n:'인도 루피',               f:'🇮🇳'},
+  ISK:{n:'아이슬란드 크로나',        f:'🇮🇸'},
+  JPY:{n:'일본 엔',                 f:'🇯🇵'},
+  KRW:{n:'한국 원',                 f:'🇰🇷'},
+  MXN:{n:'멕시코 페소',             f:'🇲🇽'},
+  MYR:{n:'말레이시아 링깃',          f:'🇲🇾'},
+  NOK:{n:'노르웨이 크로네',          f:'🇳🇴'},
+  NZD:{n:'뉴질랜드 달러',           f:'🇳🇿'},
+  PHP:{n:'필리핀 페소',             f:'🇵🇭'},
+  PLN:{n:'폴란드 즈워티',           f:'🇵🇱'},
+  RON:{n:'루마니아 레우',           f:'🇷🇴'},
+  SEK:{n:'스웨덴 크로나',           f:'🇸🇪'},
+  SGD:{n:'싱가포르 달러',           f:'🇸🇬'},
+  THB:{n:'태국 바트',               f:'🇹🇭'},
+  TRY:{n:'터키 리라',               f:'🇹🇷'},
+  USD:{n:'미국 달러',               f:'🇺🇸'},
+  ZAR:{n:'남아공 랜드',             f:'🇿🇦'},
+  TWD:{n:'대만 달러',               f:'🇹🇼'},
 };
 
-// 티커 표시 통화
-const TICK = ['EUR','JPY','GBP','CNY','CHF','AUD','CAD','HKD','NZD','SGD',
-              'KRW','INR','MXN','BRL','ZAR','TRY','SEK','NOK','PLN','TWD','IDR','MYR'];
+const ALL_CODES = Object.keys(CUR); // 32개
+const TICK_LIST = ['USD','EUR','JPY','GBP','CNY','CHF','AUD','CAD','HKD','NZD',
+                   'SGD','KRW','INR','MXN','BRL','ZAR','TRY','SEK','NOK','PLN'];
 
-// API: USD 기준 환율만 한 번 받고, 교차환율로 모든 통화를 기준통화로 전환
-// open.er-api.com — 무료, API키 불필요, 170+ 통화
-const API_LATEST = 'https://open.er-api.com/v6/latest/USD';
-// 히스토리(차트): frankfurter.app — ECB 기반 32개 지원
-const FKT = 'https://api.frankfurter.app';
+const API = 'https://api.frankfurter.app';
 
 // ── 상태 ──────────────────────────────────────────
 const S = {
-  base:     'USD',
-  usdRates: {},   // USD 기준 원본
-  rates:    {},   // base 기준 교차환율
-  prev:     {},
-  sparks:   {},
-  sel:      null,
-  period:   '1M',
-  sortC:    'code',
-  sortD:    1,
-  q:        '',
-  bq:       '',   // 기준통화 검색어
-  chart:    null,
-  timer:    null,
+  base:   'USD',
+  rates:  {},   // 오늘 (기준통화 기준)
+  prev:   {},   // 전 영업일 (기준통화 기준)
+  sparks: {},
+  sel:    null,
+  period: '1M',
+  sortC:  'code',
+  sortD:  1,
+  q:      '',
+  chart:  null,
+  timer:  null,
+  rateDate: '',   // 오늘 환율 날짜
+  prevDate: '',   // 전 영업일 날짜
 };
 
-// ── 교차환율 계산 ─────────────────────────────────
-// USD 기준 rates를 base 기준으로 변환
-function calcRates(usdRates, base) {
-  const baseInUsd = usdRates[base] || 1;
-  const result = {};
-  for (const [c, v] of Object.entries(usdRates)) {
-    result[c] = v / baseInUsd;
+// ── 전 영업일 날짜 계산 ────────────────────────────
+function prevBizDay(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() - 1);
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) {
+    d.setUTCDate(d.getUTCDate() - 1);
   }
-  result[base] = 1;
-  return result;
+  return d.toISOString().slice(0, 10);
 }
 
-// ── API 호출 ──────────────────────────────────────
-async function getUsdRates() {
-  const res = await fetch(API_LATEST);
-  if (!res.ok) throw new Error('API 오류');
-  const data = await res.json();
-  if (data.result !== 'success') throw new Error('응답 오류');
-  return data.rates; // USD 기준
+// ── API ───────────────────────────────────────────
+async function fetchToday() {
+  const res = await fetch(`${API}/latest?from=${S.base}`);
+  if (!res.ok) throw new Error('latest API 오류');
+  const d = await res.json();
+  d.rates[S.base] = 1;
+  return d;
 }
 
-async function getHist(to, days) {
-  const e = new Date(), s = new Date();
-  s.setDate(s.getDate() - days);
-  const f = d => d.toISOString().slice(0,10);
-  // frankfurter는 EUR/USD/JPY 등 주요 통화만 base로 지원
-  // base가 미지원이면 USD 기준으로 받아 교차환율 적용
-  const fktBases = ['EUR','USD','GBP','JPY','CHF','AUD','CAD','HKD','NZD','SGD',
-                    'NOK','SEK','DKK','PLN','CZK','HUF','RON','BGN','ISK','TRY',
-                    'KRW','INR','MXN','BRL','ZAR','CNY','MYR','PHP','THB','IDR','TWD'];
-  if (fktBases.includes(S.base)) {
-    const res = await fetch(`${FKT}/${f(s)}..${f(e)}?from=${S.base}&to=${to}`);
-    if (!res.ok) throw new Error();
-    const data = await res.json();
-    return data.rates;
-  } else {
-    // USD 기준으로 받아서 교차환율 계산
-    const targets = [to, S.base].filter((v,i,a)=>a.indexOf(v)===i).join(',');
-    const res = await fetch(`${FKT}/${f(s)}..${f(e)}?from=USD&to=${targets}`);
-    if (!res.ok) throw new Error();
-    const data = await res.json();
-    const baseInUsd = Object.values(data.rates).map(r=>r[S.base]).filter(Boolean);
-    const result = {};
-    Object.entries(data.rates).forEach(([date, rates]) => {
-      const bv = rates[S.base];
-      if (bv && rates[to]) result[date] = {[to]: rates[to] / bv};
-    });
-    return result;
-  }
+async function fetchPrev(dateStr) {
+  const res = await fetch(`${API}/${dateStr}?from=${S.base}`);
+  if (!res.ok) throw new Error('prev API 오류');
+  const d = await res.json();
+  d.rates[S.base] = 1;
+  return d;
 }
 
-async function getSparks() {
-  const e = new Date(), s = new Date();
-  s.setDate(s.getDate() - 7);
-  const f = d => d.toISOString().slice(0,10);
-  const tgts = TICK.filter(c => c !== S.base && !CUR[c]?.na).join(',');
-  if (!tgts) return;
+async function fetchSparks() {
+  // 7일 시계열, 주요 통화
+  const targets = TICK_LIST.filter(c => c !== S.base).join(',');
+  if (!targets) return;
   try {
-    let histRates;
-    const fktBases = ['EUR','USD','GBP','JPY','CHF','AUD','CAD','HKD','NZD','SGD',
-                      'NOK','SEK','DKK','PLN','CZK','HUF','RON','BGN','ISK','TRY',
-                      'KRW','INR','MXN','BRL','ZAR','CNY','MYR','PHP','THB','IDR','TWD'];
-    if (fktBases.includes(S.base)) {
-      const res = await fetch(`${FKT}/${f(s)}..${f(e)}?from=${S.base}&to=${tgts}`);
-      if (!res.ok) return;
-      histRates = (await res.json()).rates;
-    } else {
-      const allTgts = [...new Set([...tgts.split(','), S.base])].join(',');
-      const res = await fetch(`${FKT}/${f(s)}..${f(e)}?from=USD&to=${allTgts}`);
-      if (!res.ok) return;
-      const raw = (await res.json()).rates;
-      histRates = {};
-      Object.entries(raw).forEach(([date, rates]) => {
-        const bv = rates[S.base];
-        if (!bv) return;
-        histRates[date] = {};
-        tgts.split(',').forEach(k => { if (rates[k]) histRates[date][k] = rates[k] / bv; });
-      });
-    }
-    const dates = Object.keys(histRates).sort();
-    tgts.split(',').forEach(k => {
-      S.sparks[k] = dates.map(d => histRates[d][k]).filter(Boolean);
+    const e = new Date(), s = new Date();
+    s.setDate(s.getDate() - 9); // 주말 포함 여유
+    const f = d => d.toISOString().slice(0, 10);
+    const res = await fetch(`${API}/${f(s)}..${f(e)}?from=${S.base}&to=${targets}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const dates = Object.keys(data.rates).sort();
+    targets.split(',').forEach(k => {
+      S.sparks[k] = dates.map(d => data.rates[d][k]).filter(Boolean);
     });
   } catch(e) {}
+}
+
+async function fetchHist(to, days) {
+  const e = new Date(), s = new Date();
+  s.setDate(s.getDate() - days);
+  const f = d => d.toISOString().slice(0, 10);
+  const res = await fetch(`${API}/${f(s)}..${f(e)}?from=${S.base}&to=${to}`);
+  if (!res.ok) throw new Error('hist 오류');
+  return (await res.json()).rates;
 }
 
 // ── 전체 로드 ──────────────────────────────────────
@@ -460,15 +310,22 @@ async function fetchAll() {
   const btn = document.getElementById('rb');
   btn.disabled = true; btn.textContent = '…';
   try {
-    S.prev = { ...S.rates };
-    S.usdRates = await getUsdRates();
-    S.rates = calcRates(S.usdRates, S.base);
+    // 오늘 환율 먼저 받아서 날짜 확인 → 전 영업일 계산 → 병렬 fetch
+    const todayData = await fetchToday();
+    S.rateDate = todayData.date;
+    S.prevDate  = prevBizDay(todayData.date);
+
+    const prevData = await fetchPrev(S.prevDate);
+
+    S.rates = todayData.rates;
+    S.prev  = prevData.rates;
+
     updTs();
     renderTable();
     buildTick();
-    await getSparks();
+    await fetchSparks();
     renderTable();
-    if (S.sel && !CUR[S.sel]?.na) await loadChart(S.sel);
+    if (S.sel) await loadChart(S.sel);
   } catch(e) {
     document.getElementById('tbl').innerHTML =
       '<div class="msg" style="color:var(--dn)">⚠ 데이터를 불러올 수 없습니다<br>네트워크 상태를 확인해 주세요</div>';
@@ -478,29 +335,23 @@ async function fetchAll() {
 }
 
 function updTs() {
+  const now = new Date();
   document.getElementById('ts').textContent =
-    new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  document.getElementById('updInfo').textContent =
+    `ECB 기준 · ${S.rateDate} 환율 · 전영업일: ${S.prevDate}`;
 }
 
 // ── 기준통화 버튼 ─────────────────────────────────
-function getAllBaseCodes() {
-  const fromApi = Object.keys(S.usdRates).filter(c => CUR[c] && !CUR[c].na);
-  const known   = Object.keys(CUR).filter(c => !CUR[c].na);
-  return [...new Set([...known, ...fromApi])].sort();
-}
-
-let _bbOffset = 0; // 현재 픽셀 오프셋
-const BB_STEP  = 200; // 한 번에 스크롤할 픽셀
+let _bbOff = 0;
+const BB_STEP = 200;
 
 function renderBases() {
-  const all = getAllBaseCodes();
-  document.getElementById('bbs').innerHTML = all.map(c => {
-    const v = CUR[c] || {n:c, f:'🏳'};
+  document.getElementById('bbs').innerHTML = ALL_CODES.map(c => {
+    const v = CUR[c];
     return `<button class="bb ${c===S.base?'ac':''}" onclick="chBase('${c}')" title="${v.n}">${v.f} ${c}</button>`;
   }).join('');
-  // 활성 버튼이 보이도록 스크롤 위치 조정
-  _bbOffset = 0;
-  applyOffset(0);
+  _bbOff = 0;
   requestAnimationFrame(scrollToActive);
 }
 
@@ -508,50 +359,40 @@ function scrollToActive() {
   const wrap = document.getElementById('bbsWrap');
   const active = document.querySelector('.bb.ac');
   if (!active || !wrap) return;
-  const wrapRect  = wrap.getBoundingClientRect();
-  const btnRect   = active.getBoundingClientRect();
-  const btnCenter = btnRect.left - wrapRect.left + btnRect.width/2;
-  const wrapW     = wrapRect.width;
-  const target    = _bbOffset - (btnCenter - wrapW/2);
-  applyOffset(target);
+  const wR = wrap.getBoundingClientRect(), bR = active.getBoundingClientRect();
+  const center = bR.left - wR.left + bR.width/2;
+  applyOff(_bbOff - (center - wR.width/2));
 }
 
-function applyOffset(offset) {
-  const wrap    = document.getElementById('bbsWrap');
-  const track   = document.getElementById('bbs');
+function applyOff(off) {
+  const wrap = document.getElementById('bbsWrap');
+  const track = document.getElementById('bbs');
   if (!wrap || !track) return;
-  const maxScroll = track.scrollWidth - wrap.clientWidth;
-  _bbOffset = Math.min(0, Math.max(-maxScroll, offset));
-  track.style.transform = `translateX(${_bbOffset}px)`;
-  document.getElementById('bprev').disabled = _bbOffset >= 0;
-  document.getElementById('bnext').disabled = _bbOffset <= -maxScroll;
+  const max = track.scrollWidth - wrap.clientWidth;
+  _bbOff = Math.min(0, Math.max(-max, off));
+  track.style.transform = `translateX(${_bbOff}px)`;
+  document.getElementById('bprev').disabled = _bbOff >= 0;
+  document.getElementById('bnext').disabled = _bbOff <= -max;
 }
 
-function scrollBase(dir) {
-  applyOffset(_bbOffset - dir * BB_STEP);
-}
+function scrollBase(dir) { applyOff(_bbOff - dir * BB_STEP); }
 
-function chBase(b) {
+async function chBase(b) {
   S.base = b;
-  S.rates = calcRates(S.usdRates, b);
-  S.prev = {};
-  S.sparks = {};
-  S.sel = null;
+  S.rates = {}; S.prev = {}; S.sparks = {}; S.sel = null;
   hideChart();
   renderBases();
-  renderTable();
-  buildTick();
-  getSparks().then(renderTable);
+  await fetchAll();
 }
 
 // ── 티커 ──────────────────────────────────────────
 function buildTick() {
-  const items = TICK.filter(c => c !== S.base && S.rates[c]).map(c => {
-    const r = S.rates[c], p = S.prev[c];
+  const items = TICK_LIST.filter(c => c !== S.base && S.rates[c]).map(c => {
+    const r=S.rates[c], p=S.prev[c];
     const pct = p ? (r-p)/p*100 : 0;
     const cls = pct>0?'u':pct<0?'d':'f';
     const ar  = pct>0?'▲':pct<0?'▼':'─';
-    return `<div class="ti">${CUR[c]?.f||''} ${c} <span class="r">${fmt(c,r)}</span><span class="${cls}">${ar}${Math.abs(pct).toFixed(2)}%</span></div>`;
+    return `<div class="ti">${CUR[c].f} ${c} <span class="r">${fmt(c,r)}</span><span class="${cls}">${ar}${Math.abs(pct).toFixed(2)}%</span></div>`;
   });
   const h = items.join('') + items.join('');
   document.getElementById('tk').innerHTML = h || '<div class="ti">—</div>';
@@ -559,11 +400,11 @@ function buildTick() {
 
 // ── 포매팅 ────────────────────────────────────────
 function fmt(c, v) {
-  if (v == null) return '—';
-  if (v >= 100000) return v.toLocaleString('ko-KR',{maximumFractionDigits:0});
-  if (v >= 10000)  return v.toLocaleString('ko-KR',{maximumFractionDigits:1});
-  if (v >= 1000)   return v.toLocaleString('ko-KR',{maximumFractionDigits:2});
-  if (v >= 1)      return v.toFixed(4);
+  if (v==null) return '—';
+  if (v>=100000) return v.toLocaleString('ko-KR',{maximumFractionDigits:0});
+  if (v>=10000)  return v.toLocaleString('ko-KR',{maximumFractionDigits:1});
+  if (v>=1000)   return v.toLocaleString('ko-KR',{maximumFractionDigits:2});
+  if (v>=1)      return v.toFixed(4);
   return v.toFixed(6);
 }
 function dc(v) { return !v?4:v>=1000?0:v>=1?4:6; }
@@ -572,10 +413,10 @@ function pct(c) {
   return (r&&p) ? (r-p)/p*100 : 0;
 }
 
-// ── 테이블 렌더 ───────────────────────────────────
+// ── 테이블 ────────────────────────────────────────
 function renderTable() {
   const q = S.q.toLowerCase();
-  let codes = Object.keys(CUR)
+  let codes = ALL_CODES
     .filter(c => c !== S.base)
     .filter(c => !q || c.toLowerCase().includes(q) || CUR[c].n.toLowerCase().includes(q));
 
@@ -584,31 +425,24 @@ function renderTable() {
     if (S.sortC==='code')   { va=a; vb=b; }
     else if (S.sortC==='rate') { va=S.rates[a]||0; vb=S.rates[b]||0; }
     else { va=pct(a); vb=pct(b); }
-    if (typeof va==='string') return S.sortD * va.localeCompare(vb);
-    return S.sortD * (va-vb);
+    if (typeof va==='string') return S.sortD*va.localeCompare(vb);
+    return S.sortD*(va-vb);
   });
 
   document.getElementById('cnt').textContent = `(${codes.length})`;
-  if (!codes.length) {
-    document.getElementById('tbl').innerHTML='<div class="msg">검색 결과 없음</div>';
-    return;
-  }
+  if (!codes.length) { document.getElementById('tbl').innerHTML='<div class="msg">검색 결과 없음</div>'; return; }
 
   const rows = codes.map(c => {
     const v=CUR[c], r=S.rates[c], p=S.prev[c];
     const pc=pct(c), ab=(r&&p)?r-p:null;
-    const d=pc>0?1:pc<0?-1:0;
-    const ar=d>0?'▲':d<0?'▼':'─';
+    const d=pc>0?1:pc<0?-1:0, ar=d>0?'▲':d<0?'▼':'─';
 
-    const rH = v.na
-      ? `<span class="rv" style="color:var(--tx3);font-size:11px">API 미지원</span>`
-      : r ? `<span class="rv">${fmt(c,r)}</span>` : `<span class="rv" style="color:var(--tx3)">—</span>`;
-
-    const cH = v.na ? '' : r ? `
+    const rH = r ? `<span class="rv">${fmt(c,r)}</span>` : `<span class="rv" style="color:var(--tx3)">—</span>`;
+    const cH = r && p ? `
       <div class="chg">
         <span class="cp ${d>0?'cpu':d<0?'cpd':'cpf'}">${ar} ${Math.abs(pc).toFixed(3)}%</span>
-        ${ab!=null?`<span class="ca">${ab>=0?'+':''}${ab.toFixed(dc(r))}</span>`:''}
-      </div>` : `<span style="color:var(--tx3);font-size:11px">—</span>`;
+        <span class="ca">${ab>=0?'+':''}${ab.toFixed(dc(r))}</span>
+      </div>` : `<span style="color:var(--tx3);font-size:11px;font-family:var(--mono)">—</span>`;
 
     return `<tr class="${c===S.sel?'sel':''}" onclick="selCur('${c}')">
       <td><div class="cc">
@@ -628,14 +462,11 @@ function renderTable() {
         <th onclick="srt('code')" class="${S.sortC==='code'?'sd':''}">통화 ${th('code')}</th>
         <th class="r ${S.sortC==='rate'?'sd':''}" onclick="srt('rate')">환율 ${th('rate')}</th>
         <th class="r ${S.sortC==='change'?'sd':''}" onclick="srt('change')">등락 ${th('change')}</th>
-        <th class="r spc">7일 추이</th>
+        <th class="r spc">추이</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div class="fn">
-      환율: open.er-api.com (170+ 통화) · 차트: frankfurter.app (ECB 기반 32개 통화)<br>
-      ※ 기준통화가 frankfurter 미지원 통화일 경우 교차환율로 자동 계산 · ZWG(짐바브웨 골드)는 국제 API 미지원
-    </div>`;
+    <div class="fn">등락률: ${S.prevDate||'—'} → ${S.rateDate||'—'} (전 영업일 대비) · 출처: ECB / frankfurter.app</div>`;
 }
 
 function mkSpark(c) {
@@ -651,29 +482,18 @@ function mkSpark(c) {
   return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><polyline points="${pts}" fill="none" stroke="${up?'var(--up)':'var(--dn)'}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
 }
 
-function srt(col) { if(S.sortC===col)S.sortD*=-1;else{S.sortC=col;S.sortD=1;} renderTable(); }
+function srt(col) { if(S.sortC===col)S.sortD*=-1; else{S.sortC=col;S.sortD=1;} renderTable(); }
 function filt()   { S.q=document.getElementById('tsrch').value; renderTable(); }
 
 // ── 통화 선택 & 차트 ──────────────────────────────
 async function selCur(c) {
   S.sel=c; renderTable();
-  const v=CUR[c];
-  if (v.na) {
-    document.getElementById('ctop').innerHTML=`<div class="ph">
-      <span style="font-size:24px">${v.f}</span><br>
-      <strong style="font-size:14px;color:var(--tx)">${c} — ${v.n}</strong><br>
-      2024년 4월 도입된 금 연동 통화<br>국제 API 미지원으로 차트 제공 불가
-    </div>`;
-    document.getElementById('cbody').style.display='none';
-    document.getElementById('sc').style.display='none';
-    return;
-  }
   await loadChart(c);
 }
 
 async function loadChart(c) {
-  const v=CUR[c], r=S.rates[c];
-  const pc=pct(c), ab=(S.rates[c]&&S.prev[c])?S.rates[c]-S.prev[c]:null;
+  const v=CUR[c], r=S.rates[c], p=S.prev[c];
+  const pc=pct(c), ab=(r&&p)?r-p:null;
   const d=pc>0?1:pc<0?-1:0, ar=d>0?'▲':d<0?'▼':'─';
   const cls=d>0?'tcu':d<0?'tcd':'tcf';
 
@@ -685,23 +505,29 @@ async function loadChart(c) {
     <div class="pr">${['1W','1M','3M','6M','1Y'].map(p=>`<button class="pb ${S.period===p?'ac':''}" onclick="chPer('${c}','${p}')">${p}</button>`).join('')}</div>
   </div>`;
 
+  // canvas 구조 항상 복원 후 표시
+  if (!document.getElementById('cbody').querySelector('canvas#mc')) {
+    document.getElementById('cbody').innerHTML='<div class="cb"><div class="cw"><canvas id="mc"></canvas></div></div>';
+    if(S.chart){S.chart.destroy();S.chart=null;}
+  }
   document.getElementById('cbody').style.display='block';
   document.getElementById('sc').style.display='block';
 
   const dm={'1W':7,'1M':30,'3M':90,'6M':180,'1Y':365};
   try {
-    const hist=await getHist(c, dm[S.period]);
+    const hist=await fetchHist(c, dm[S.period]);
     const dates=Object.keys(hist).sort();
     const vals=dates.map(d=>hist[d][c]).filter(Boolean);
-    if (vals.length<2) throw new Error();
+    if(vals.length<2) throw new Error();
     drawChart(dates.slice(-vals.length), vals, c);
     renderStats(vals, c);
   } catch(e) {
-    document.getElementById('cbody').innerHTML=`<div class="ph" style="padding:20px 20px">차트 데이터를 불러올 수 없습니다<br><span style="font-size:10px;color:var(--tx3)">(frankfurter.app 미지원 통화)</span></div>`;
+    document.getElementById('cbody').innerHTML='<div class="ph" style="padding:20px">차트 데이터 없음</div>';
+    if(S.chart){S.chart.destroy();S.chart=null;}
   }
 }
 
-function chPer(c,p) { S.period=p; loadChart(c); }
+function chPer(c,p){ S.period=p; loadChart(c); }
 
 function drawChart(dates, vals, c) {
   const ctx=document.getElementById('mc').getContext('2d');
@@ -755,24 +581,16 @@ function hideChart() {
   if(S.chart){S.chart.destroy();S.chart=null;}
 }
 
-// ── 자동 갱신 (1분) ───────────────────────────────
+// ── 자동 갱신 (5분 — ECB는 하루 1회지만 장중 변동 감지용) ──
 function startRefresh() {
   clearInterval(S.timer);
-  S.timer=setInterval(async()=>{
-    S.prev={...S.rates};
-    try {
-      S.usdRates=await getUsdRates();
-      S.rates=calcRates(S.usdRates,S.base);
-      updTs(); renderTable(); buildTick();
-    }catch(e){}
-  }, 60000);
+  S.timer=setInterval(fetchAll, 5*60*1000);
 }
 
 // ── 초기화 ────────────────────────────────────────
 (async()=>{
-  document.getElementById('bbs').innerHTML='<span style="font-family:var(--mono);font-size:11px;color:var(--tx3)">로딩 중…</span>';
-  await fetchAll();
   renderBases();
+  await fetchAll();
   startRefresh();
 })();
 </script>
