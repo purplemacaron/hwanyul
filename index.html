@@ -619,48 +619,52 @@ function startRefresh() {
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  국제 뉴스 슬라이더
-//  RSS → rss2json.com 프록시 (키 없음, CORS 허용)
+//  allorigins.win CORS 프록시로 RSS 직접 파싱
+//  키 없음, GitHub Pages 작동
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const NEWS_FEEDS = [
   { src:'BBC World',  rss:'https://feeds.bbci.co.uk/news/world/rss.xml' },
-  { src:'Reuters',    rss:'https://feeds.reuters.com/reuters/topNews' },
   { src:'Al Jazeera', rss:'https://www.aljazeera.com/xml/rss/all.xml' },
   { src:'AP News',    rss:'https://feeds.apnews.com/rss/apf-topnews' },
+  { src:'NPR World',  rss:'https://feeds.npr.org/1004/rss.xml' },
 ];
-const R2J = 'https://api.rss2json.com/v1/api.json?rss_url=';
+const PROXY = url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
 
 const NS = { items:[], cur:0, timer:null };
 
-async function fetchNews() {
-  const results = await Promise.allSettled(
-    NEWS_FEEDS.map(feed =>
-      fetch(R2J + encodeURIComponent(feed.rss) + '&count=5')
-        .then(r => r.json())
-        .then(d => (d.items||[]).map(it => ({ src: feed.src, title: it.title, link: it.link })))
-    )
-  );
-  const all = [];
-  results.forEach(r => { if (r.status==='fulfilled') all.push(...r.value); });
-  // 소스별로 번갈아 섞기
-  NS.items = interleave(results
-    .filter(r=>r.status==='fulfilled')
-    .map(r=>r.value))
-    .slice(0, 20);
-  if (NS.items.length) renderNewsSlides();
+async function fetchOneFeed(feed) {
+  const res = await fetch(PROXY(feed.rss));
+  if (!res.ok) throw new Error();
+  const { contents } = await res.json();
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(contents, 'text/xml');
+  const items = [...doc.querySelectorAll('item')].slice(0, 6);
+  return items.map(it => ({
+    src:   feed.src,
+    title: it.querySelector('title')?.textContent?.trim() || '',
+    link:  it.querySelector('link')?.textContent?.trim() ||
+           it.querySelector('guid')?.textContent?.trim() || '#',
+  })).filter(it => it.title);
 }
 
-function interleave(arrays) {
-  const out = [], maxLen = Math.max(...arrays.map(a=>a.length));
+async function fetchNews() {
+  const results = await Promise.allSettled(NEWS_FEEDS.map(fetchOneFeed));
+  const arrays = results.filter(r=>r.status==='fulfilled').map(r=>r.value);
+  if (!arrays.length) return;
+  // 소스 번갈아 섞기
+  const out = [];
+  const maxLen = Math.max(...arrays.map(a=>a.length));
   for (let i=0; i<maxLen; i++)
     arrays.forEach(a=>{ if(a[i]) out.push(a[i]); });
-  return out;
+  NS.items = out.slice(0, 20);
+  if (NS.items.length) renderNewsSlides();
 }
 
 function renderNewsSlides() {
   const slides = document.getElementById('newsSlides');
   const dots   = document.getElementById('newsDots');
-  slides.innerHTML = NS.items.map((it,i)=>`
-    <div class="news-slide" onclick="window.open('${it.link}','_blank')">
+  slides.innerHTML = NS.items.map((it)=>`
+    <div class="news-slide" onclick="window.open(${JSON.stringify(it.link)},'_blank')">
       <div class="news-src">${it.src}</div>
       <div class="news-ttl">${it.title}</div>
     </div>`).join('');
@@ -688,8 +692,8 @@ function startNewsAuto() {
 }
 
 fetchNews();
-setInterval(fetchNews, 10*60*1000); // 10분마다 갱신
+setInterval(fetchNews, 10*60*1000);
 
 </script>
 </body>
-  </html>
+</html>
